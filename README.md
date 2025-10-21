@@ -8,7 +8,7 @@ En el `composer.json` del proyecto Magento:
 ```json
 {
   "repositories": [
-    {"type": "vcs", "url": "https://github.com/USUARIO/santi-module-tntcarriers"}
+    {"type": "vcs", "url": "https://github.com/santimolto/module-tntcarriers"}
   ],
   "require": {
     "santi/module-tntcarriers": "^1.0"
