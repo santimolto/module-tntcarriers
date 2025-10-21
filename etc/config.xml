@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
+   <default>
+       <carriers>
+           <tntcarriers>
+               <active>0</active>
+               <title>Shipping Title</title>
+               <name>Shipping Method Name</name>
+               <shipping_cost>10</shipping_cost>
+               <sallowspecific>0</sallowspecific>
+               <sort_order>15</sort_order>
+               <model>Santi\Tntcarriers\Model\Carrier\Tntcarriers</model>
+           </tntcarriers>
+       </carriers>
+   </default>
+</config>
