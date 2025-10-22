@@ -1,149 +1,112 @@
 <?php
+declare(strict_types=1);
 
 namespace Santi\Tntcarriers\Model\Carrier;
 
+use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Quote\Model\Quote\Address\RateRequest;
+use Magento\Quote\Model\Quote\Address\RateResult\ErrorFactory;
+use Magento\Quote\Model\Quote\Address\RateResult\MethodFactory;
 use Magento\Shipping\Model\Carrier\AbstractCarrier;
 use Magento\Shipping\Model\Carrier\CarrierInterface;
+use Magento\Shipping\Model\Rate\ResultFactory;
+use Magento\Shipping\Model\Tracking\Result\StatusFactory;
+use Magento\Store\Model\StoreManagerInterface;
+use Psr\Log\LoggerInterface;
 
-/**
- * Custom shipping model
- */
 class Tntcarriers extends AbstractCarrier implements CarrierInterface
 {
-    /**
-     * @var string
-     */
     protected $_code = 'tntcarriers';
-
-    /**
-     * @var bool
-     */
     protected $_isFixed = true;
 
-    /**
-     * @var \Magento\Shipping\Model\Rate\ResultFactory
-     */
-    private $rateResultFactory;
+    private ResultFactory $rateResultFactory;
+    private MethodFactory $rateMethodFactory;
+    private StatusFactory $trackStatusFactory; // prop mantiene el nombre “trackStatusFactory”
+    private StoreManagerInterface $storeManager;
 
-    /**
-     * @var \Magento\Quote\Model\Quote\Address\RateResult\MethodFactory
-     */
-    private $rateMethodFactory;
-
-    /**
-     * @param \Magento\Framework\App\Config\ScopeConfigInterface $scopeConfig
-     * @param \Magento\Quote\Model\Quote\Address\RateResult\ErrorFactory $rateErrorFactory
-     * @param \Psr\Log\LoggerInterface $logger
-     * @param \Magento\Shipping\Model\Rate\ResultFactory $rateResultFactory
-     * @param \Magento\Quote\Model\Quote\Address\RateResult\MethodFactory $rateMethodFactory
-     * @param array $data
-     */
     public function __construct(
-        \Magento\Framework\App\Config\ScopeConfigInterface $scopeConfig,
-        \Magento\Quote\Model\Quote\Address\RateResult\ErrorFactory $rateErrorFactory,
-        \Psr\Log\LoggerInterface $logger,
-        \Magento\Shipping\Model\Rate\ResultFactory $rateResultFactory,
-        \Magento\Quote\Model\Quote\Address\RateResult\MethodFactory $rateMethodFactory,
+        ScopeConfigInterface $scopeConfig,
+        ErrorFactory $rateErrorFactory,
+        LoggerInterface $logger,
+        ResultFactory $rateResultFactory,
+        MethodFactory $rateMethodFactory,
+        StatusFactory $statusFactory,             // <-- renombrado
+        StoreManagerInterface $storeManager,
         array $data = []
     ) {
         parent::__construct($scopeConfig, $rateErrorFactory, $logger, $data);
-
-        $this->rateResultFactory = $rateResultFactory;
-        $this->rateMethodFactory = $rateMethodFactory;
+        $this->rateResultFactory  = $rateResultFactory;
+        $this->rateMethodFactory  = $rateMethodFactory;
+        $this->trackStatusFactory = $statusFactory; // <-- asignación
+        $this->storeManager       = $storeManager;
     }
 
-    /**
-     * Custom Shipping Rates Collector
-     *
-     * @param RateRequest $request
-     * @return \Magento\Shipping\Model\Rate\Result|bool
-     */
     public function collectRates(RateRequest $request)
     {
         if (!$this->getConfigFlag('active')) {
             return false;
         }
 
-        /** @var \Magento\Shipping\Model\Rate\Result $result */
         $result = $this->rateResultFactory->create();
-
-        /** @var \Magento\Quote\Model\Quote\Address\RateResult\Method $method */
         $method = $this->rateMethodFactory->create();
 
         $method->setCarrier($this->_code);
-        $method->setCarrierTitle($this->getConfigData('title'));
-
+        $method->setCarrierTitle((string)$this->getConfigData('title'));
         $method->setMethod($this->_code);
-        $method->setMethodTitle($this->getConfigData('name'));
+        $method->setMethodTitle((string)$this->getConfigData('name'));
 
         $shippingCost = (float)$this->getConfigData('shipping_cost');
-
         $method->setPrice($shippingCost);
         $method->setCost($shippingCost);
 
         $result->append($method);
-
         return $result;
     }
 
-    /**
-     * @return array
-     */
     public function getAllowedMethods()
     {
-        return [$this->_code => $this->getConfigData('name')];
+        return [$this->_code => (string)$this->getConfigData('name')];
     }
-    public function getTrackingInfo($trackingnumber)
+
+    public function isTrackingAvailable(): bool
     {
-        /** @var \Magento\Shipping\Model\Tracking\Result\Status $tracking */
+        return true;
+    }
 
-        $objectManager =  \Magento\Framework\App\ObjectManager::getInstance();
-
-        $storeManager = $objectManager->get('\Magento\Store\Model\StoreManagerInterface');
-
-        $storeId =  $storeManager->getStore()->getStoreId();
+    public function getTrackingInfo($trackingNumber)
+    {
+        $storeId = (string)$this->storeManager->getStore()->getId();
 
         switch ($storeId) {
-            case "2":
-                $link = "https://www.tnt.com/express/es_es/site/herramientas-envio/seguimiento.html?searchType=ref&cons=" . $referencia; //enlace directo
+            case '4': // IT
+                $cons = 'GE' . $trackingNumber . 'WW';
+                $link = 'https://www.tnt.it/tracking/getTrack.html?wt=1&consigNos=' . $cons;
                 break;
-            case "4":
-                $trackingnumber = "GE" . $trackingnumber . "WW";
-                $link = "https://www.tnt.it/tracking/getTrack.html?wt=1&consigNos=" . $trackingnumber; //enlace directo
+            case '7': // FR
+            case '11': // FR
+            case '15': // FR
+                $link = 'https://www.tnt.com/express/fr_fr/site/home/applications/tracking.html?searchType=ref&cons=' . $trackingNumber;
                 break;
-            case "7":
-                $link = "https://www.tnt.com/express/fr_fr/site/home/applications/tracking.html?searchType=ref&cons=" . $referencia; //enlace directo
-                break;
-            case "15":
-                $link = "https://www.tnt.com/express/fr_fr/site/home/applications/tracking.html?searchType=ref&cons=" . $referencia; //enlace directo
-                break;
-            case "11":
-                $link = "https://www.tnt.com/express/fr_fr/site/home/applications/tracking.html?searchType=ref&cons=" . $referencia; //enlace directo
-                break;
+            case '2': // ES
             default:
-                $link = "https://www.tnt.com/express/es_es/site/herramientas-envio/seguimiento.html?searchType=ref&cons=" . $referencia; //enlace directo
+                $link = 'https://www.tnt.com/express/es_es/site/herramientas-envio/seguimiento.html?searchType=ref&cons=' . $trackingNumber;
+                break;
         }
 
-        $tracking = $this->trackStatusFactory->create();
+        $status = $this->trackStatusFactory->create();
+        $status->setCarrier($this->_code);
+        $status->setCarrierTitle((string)$this->getConfigData('title'));
+        $status->setTracking($trackingNumber);
+        $status->setUrl($link);
 
-        $title = $this->getConfigData('title');
+        $status->setStatus(__('Ver seguimiento en TNT'));
+        $status->setProgressdetail([[
+            'deliverydate'     => '',
+            'deliverytime'     => '',
+            'deliverylocation' => '',
+            'activity'         => __('Ver seguimiento en TNT')
+        ]]);
 
-        $tracking->setCarrier($this->_code); //your carrier code
-        $tracking->setCarrierTitle($title);
-        $tracking->setTracking($trackingnumber);
-        $tracking->setUrl($link);
-        //you may want to add the events coming from your api
-        $trackEventsData[] =
-            [
-                'deliverydate' => 'date',
-                'deliverytime' => 'time',
-                'deliverylocation' => 'location',
-                'activity' => 'activity'
-            ];
-        $tracking->setStatus(isset($trackEventsData[0]) ? $trackEventsData[0]['activity'] : '');
-        $tracking->setProgressdetail($trackEventsData);
-
-        return $tracking;
+        return $status;
     }
 }
